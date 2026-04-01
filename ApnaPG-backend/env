@@ -1,0 +1,23 @@
+# ===========================================
+# ApnaPG Backend Environment Variables
+# ===========================================
+
+# --- Database (Neon Serverless PostgreSQL) ---
+DATABASE_URL=postgresql://neondb_owner:npg_3CIZif1PqFUr@ep-cold-dawn-a16kahsw-pooler.ap-southeast-1.aws.neon.tech/neondb?sslmode=require&channel_binding=require
+
+# --- Authentication (Clerk) ---
+CLERK_SECRET_KEY=sk_test_rU5e5aInC8ALG4bD6HglhPYTII0A8GnaIVgZYAJLpI
+CLERK_JWKS_URL=https://just-wren-81.clerk.accounts.dev/.well-known/jwks.json
+CLERK_ISSUER=https://just-wren-81.clerk.accounts.dev
+# CLERK_JWKS_URL=https://full-sheepdog-20.clerk.accounts.dev/.well-known/jwks.json
+# CLERK_ISSUER=https://full-sheepdog-20.clerk.accounts.dev
+
+# --- Media Storage (Cloudinary) ---
+CLOUDINARY_CLOUD_NAME=dzsl28yka
+CLOUDINARY_API_KEY=722281466155326
+CLOUDINARY_API_SECRET=CvSTegrHgd2n5bjXqz0hm7zUVq0
+
+# --- Application ---
+APP_ENV=development
+APP_DEBUG=true
+ALLOWED_ORIGINS=http://localhost:5173,http://localhost:3000

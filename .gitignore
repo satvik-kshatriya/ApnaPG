@@ -1,0 +1,60 @@
+#========================================
+# OS Generated Files
+#========================================
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+#========================================
+# IDEs and Editors
+#========================================
+.idea/
+.vscode/
+*.swp
+*.swo
+
+#========================================
+# Environment Variables
+#========================================
+.env
+.env.*
+!.env.example
+
+#========================================
+# Frontend / Node.js
+#========================================
+node_modules/
+dist/
+dist-ssr/
+build/
+*.tsbuildinfo
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+
+#========================================
+# Backend / Python
+#========================================
+__pycache__/
+*.py[cod]
+*$py.class
+.Python
+env/
+venv/
+venv.bak/
+.venv/
+.pytest_cache/
+htmlcov/
+.coverage
+.coverage.*
+.cache
+nosetests.xml
+coverage.xml
+
+# Ignore dynamically created PDFs and temp files
+test_lease.pdf
+*.log
