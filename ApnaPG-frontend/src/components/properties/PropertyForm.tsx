@@ -1,7 +1,9 @@
 import React, { useState } from "react";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
-import { X, UploadCloud, Loader2, ArrowLeft } from "lucide-react";
+import { X, UploadCloud, Loader2, ArrowLeft, IndianRupee } from "lucide-react";
+import { toast } from "sonner";
 import { api } from "../../lib/api";
+import { LocationPicker } from "./LocationPicker";
 
 type HouseRules = Record<string, string | boolean>;
 
@@ -22,14 +24,16 @@ export function PropertyForm({ onSuccess, onCancel, initialData }: PropertyFormP
   const [description, setDescription] = useState(initialData?.description || "");
   const [occupancyType, setOccupancyType] = useState(initialData?.occupancy_type || "single");
 
+  // Location State
+  const [lat, setLat] = useState<number | null>(initialData?.location?.coordinates?.[1] || null);
+  const [lng, setLng] = useState<number | null>(initialData?.location?.coordinates?.[0] || null);
+
   // House Rules Builder State
   const [houseRules, setHouseRules] = useState<HouseRules>(initialData?.house_rules || {});
   const [newRuleKey, setNewRuleKey] = useState("");
   const [newRuleValue, setNewRuleValue] = useState("");
 
   // Cloudinary Images State
-  // Note: For simplicity in MVP, we track new files specifically. 
-  // Existing images are handled by the backend unless we add a complex image manager here.
   const [newImages, setNewImages] = useState<File[]>([]);
   const [existingImages, setExistingImages] = useState<any[]>(initialData?.images || []);
 
@@ -65,7 +69,7 @@ export function PropertyForm({ onSuccess, onCancel, initialData }: PropertyFormP
   };
 
   const removeExistingImage = (id: string) => {
-    setExistingImages((prev) => prev.filter(img => img.id !== id));
+    setExistingImages((prev) => prev.filter(img => (img._id || img.url) !== id));
   };
 
   const uploadImages = async (): Promise<string[]> => {
@@ -79,7 +83,6 @@ export function PropertyForm({ onSuccess, onCancel, initialData }: PropertyFormP
     }
 
     const uploadedUrls: string[] = [];
-
     for (const file of newImages) {
       const formData = new FormData();
       formData.append("file", file);
@@ -102,7 +105,7 @@ export function PropertyForm({ onSuccess, onCancel, initialData }: PropertyFormP
   const mutation = useMutation({
     mutationFn: async (payload: any) => {
       if (isEdit) {
-        const res = await api.put(`/api/properties/${initialData.id}`, payload);
+        const res = await api.put(`/api/properties/${initialData._id}`, payload);
         return res.data;
       } else {
         const res = await api.post("/api/properties", payload);
@@ -111,15 +114,16 @@ export function PropertyForm({ onSuccess, onCancel, initialData }: PropertyFormP
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ["owner_properties"] });
+      toast.success(isEdit ? "Listing updated successfully!" : "Property published successfully!");
       onSuccess();
     },
     onError: (err: any) => {
-      setErrorMsg(
-        err.response?.data?.detail?.[0]?.msg || 
-        err.response?.data?.detail || 
-        err.message || 
-        "An error occurred."
-      );
+      const msg = err.response?.data?.detail?.[0]?.msg || 
+                  err.response?.data?.detail || 
+                  err.message || 
+                  "An error occurred.";
+      setErrorMsg(msg);
+      toast.error(msg);
       setIsUploading(false);
     },
   });
@@ -130,213 +134,247 @@ export function PropertyForm({ onSuccess, onCancel, initialData }: PropertyFormP
     setIsUploading(true);
 
     try {
+      if (lat === null || lng === null) {
+        toast.error("Please pinpoint the exact location on the map.");
+        setIsUploading(false);
+        return;
+      }
+
       const newUrls = await uploadImages();
       
-      // Combine existing and new images
-      // Backend expects image_urls for Create, but for Edit we might need a different structure 
-      // if we want to retain order. For Phase 2, we'll just send all active URLs.
-      const allUrls = [
-        ...existingImages.map(img => img.image_url),
-        ...newUrls
+      const allImages = [
+        ...existingImages.map(img => ({
+          url: img.url || img.image_url,
+          is_cover: img.is_cover || false
+        })),
+        ...newUrls.map((url, idx) => ({
+          url,
+          is_cover: existingImages.length === 0 && idx === 0
+        }))
       ];
-
-      const latJitter = (Math.random() - 0.5) * 0.05;
-      const lngJitter = (Math.random() - 0.5) * 0.05;
 
       const payload = {
         title,
         description,
         locality,
-        latitude: initialData?.latitude || (28.6139 + latJitter),
-        longitude: initialData?.longitude || (77.2090 + lngJitter),
-        monthly_rent: Number(monthlyRent),
+        latitude: lat,
+        longitude: lng,
+        monthly_rent: Number(String(monthlyRent).replace(/,/g, "")) || 0,
         occupancy_type: occupancyType,
         house_rules: houseRules,
-        image_urls: allUrls,
+        images: allImages,
       };
 
       mutation.mutate(payload);
     } catch (err: any) {
-      setErrorMsg(err.message || "Failed to process form.");
+      const msg = err.message || "Failed to process form.";
+      setErrorMsg(msg);
+      toast.error(msg);
       setIsUploading(false);
     }
   };
 
   return (
-    <form onSubmit={handleSubmit} className="bg-white rounded-xl shadow-sm border border-gray-200 p-6 md:p-8 space-y-8">
-      <div className="flex items-center justify-between border-b pb-4">
-        <h2 className="text-2xl font-bold text-gray-900">
-          {isEdit ? "Edit Listing" : "List a New Property"}
-        </h2>
+    <form onSubmit={handleSubmit} className="bg-white rounded-3xl shadow-xl border border-zinc-100 p-8 md:p-12 space-y-10 animate-in fade-in slide-in-from-bottom-4 duration-500">
+      <div className="flex items-center justify-between border-b border-zinc-100 pb-6">
+        <div>
+          <h2 className="text-3xl font-black text-zinc-900 tracking-tight">
+            {isEdit ? "Edit Listing" : "List Property"}
+          </h2>
+          <p className="text-zinc-400 text-sm font-medium mt-1">Fill in the details to reach verified tenants.</p>
+        </div>
         <button 
           type="button" 
           onClick={onCancel}
-          className="text-gray-500 hover:text-gray-700 flex items-center gap-1 text-sm font-medium"
+          className="text-zinc-400 hover:text-zinc-900 flex items-center gap-2 text-sm font-bold uppercase tracking-widest transition-colors group"
         >
-          <ArrowLeft size={16} /> Back to Dashboard
+          <ArrowLeft size={16} className="group-hover:-translate-x-1 transition-transform" /> Back
         </button>
       </div>
 
       {errorMsg && (
-        <div className="bg-red-50 text-red-600 p-4 rounded-lg text-sm border border-red-200">
+        <div className="bg-red-50 text-red-600 p-4 rounded-2xl text-sm font-semibold border border-red-100 animate-in fade-in zoom-in duration-200">
           {errorMsg}
         </div>
       )}
 
-      {/* Basic Details */}
-      <section className="grid grid-cols-1 md:grid-cols-2 gap-6">
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Property Title</label>
+      {/* Basic Details Section */}
+      <section className="grid grid-cols-1 md:grid-cols-2 gap-8">
+        <div className="space-y-3">
+          <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Property Title</label>
           <input 
             required 
             type="text" 
             value={title} 
             onChange={(e) => setTitle(e.target.value)} 
-            placeholder="e.g. Sunny Room near Campus" 
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="e.g. Minimalist Studio near North Campus" 
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder:text-zinc-300"
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Locality</label>
+        <div className="space-y-3">
+          <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Locality</label>
           <input 
             required 
             type="text" 
             value={locality} 
             onChange={(e) => setLocality(e.target.value)} 
             placeholder="e.g. Karol Bagh, New Delhi" 
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder:text-zinc-300"
           />
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Monthly Rent (₹)</label>
-          <input 
-            required 
-            type="number" 
-            min="0"
-            value={monthlyRent} 
-            onChange={(e) => setMonthlyRent(e.target.value)} 
-            placeholder="e.g. 8500" 
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
-          />
+        {/* Interactive Map Picker Refined */}
+        <div className="md:col-span-2 space-y-4">
+          <label className="text-[11px] font-bold text-indigo-600 bg-indigo-50 px-2 py-0.5 rounded-md uppercase tracking-[0.2em] inline-flex items-center gap-2">
+             Location Precision
+          </label>
+          <div className="rounded-2xl overflow-hidden border border-zinc-200 shadow-inner">
+            <LocationPicker 
+              position={lat && lng ? [lat, lng] : null}
+              onLocationSelect={(newLat, newLng) => {
+                setLat(newLat);
+                setLng(newLng);
+              }} 
+            />
+          </div>
+          <p className="text-[11px] text-zinc-400 font-medium italic pl-1">
+            Search for neighborhood and click the map to drop a pin. High-precision locations build tenant trust.
+          </p>
         </div>
 
-        <div className="space-y-2">
-          <label className="text-sm font-medium text-gray-700">Occupancy Type</label>
+        <div className="space-y-3">
+          <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Monthly Rent (₹)</label>
+          <div className="relative">
+             <input 
+              required 
+              type="text" 
+              value={monthlyRent} 
+              onChange={(e) => setMonthlyRent(e.target.value)} 
+              placeholder="e.g. 12,500" 
+              className="w-full bg-zinc-50 border border-zinc-200 rounded-xl pl-10 pr-4 py-3 text-zinc-900 font-bold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder:text-zinc-300"
+            />
+            <IndianRupee size={18} className="absolute left-4 top-1/2 -translate-y-1/2 text-zinc-400" />
+          </div>
+        </div>
+
+        <div className="space-y-3">
+          <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Occupancy Type</label>
           <select 
             value={occupancyType} 
             onChange={(e) => setOccupancyType(e.target.value)} 
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500 bg-white"
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 font-semibold focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all appearance-none cursor-pointer"
           >
-            <option value="single">Single</option>
-            <option value="double">Double</option>
-            <option value="triple">Triple</option>
+            <option value="single">Single Room</option>
+            <option value="double">Double Sharing</option>
+            <option value="triple">Triple Sharing</option>
           </select>
         </div>
         
-        <div className="md:col-span-2 space-y-2">
-          <label className="text-sm font-medium text-gray-700">Description</label>
+        <div className="md:col-span-2 space-y-3">
+          <label className="text-[11px] font-bold text-zinc-400 uppercase tracking-[0.2em] ml-1">Property Description</label>
           <textarea 
             required 
-            rows={4}
+            rows={5}
             value={description} 
             onChange={(e) => setDescription(e.target.value)} 
-            placeholder="Describe the property, amenities..." 
-            className="w-full border border-gray-300 rounded-md px-3 py-2 text-gray-900 focus:outline-none focus:ring-2 focus:ring-primary-500"
+            placeholder="Showcase the best parts of your property, amenities, and connectivity..." 
+            className="w-full bg-zinc-50 border border-zinc-200 rounded-xl px-4 py-3 text-zinc-900 focus:outline-none focus:ring-4 focus:ring-indigo-500/10 focus:border-indigo-500 transition-all placeholder:text-zinc-300 leading-relaxed"
           />
         </div>
       </section>
 
-      {/* House Rules */}
-      <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">House Rules</h3>
-        <div className="flex flex-wrap gap-2">
+      {/* House Rules Modern Builder */}
+      <section className="space-y-6 bg-zinc-50/50 p-6 rounded-2xl border border-zinc-100">
+        <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-[0.2em]">House Rules</h3>
+        <div className="flex flex-wrap gap-3">
           {Object.entries(houseRules).map(([key, value]) => (
-            <div key={key} className="flex items-center gap-2 bg-gray-100 px-3 py-1.5 rounded-full text-sm">
-              <span className="font-medium text-gray-700">{key.replace(/_/g, " ")}:</span>
-              <span className="text-gray-600">{value}</span>
-              <button type="button" onClick={() => removeHouseRule(key)} className="text-gray-400 hover:text-red-500"><X size={14}/></button>
+            <div key={key} className="flex items-center gap-3 bg-white border border-zinc-200 pl-4 pr-2 py-2 rounded-xl text-xs font-bold shadow-sm animate-in fade-in zoom-in">
+              <span className="text-zinc-400 uppercase text-[9px]">{key.replace(/_/g, " ")}:</span>
+              <span className="text-zinc-900">{value}</span>
+              <button type="button" onClick={() => removeHouseRule(key)} className="p-1 text-zinc-300 hover:text-red-500 hover:bg-red-50 rounded-lg transition-colors"><X size={14}/></button>
             </div>
           ))}
         </div>
-        <div className="flex flex-col sm:flex-row gap-2">
+        <div className="grid grid-cols-1 sm:grid-cols-5 gap-3">
           <input 
             type="text" 
             value={newRuleKey} 
             onChange={(e) => setNewRuleKey(e.target.value)} 
-            placeholder="Rule Name" 
-            className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+            placeholder="Rule e.g. Guest Policy" 
+            className="sm:col-span-2 bg-white border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/10 outline-none"
           />
           <input 
             type="text" 
             value={newRuleValue} 
             onChange={(e) => setNewRuleValue(e.target.value)} 
-            placeholder="Value" 
-            className="flex-1 border border-gray-300 rounded-md px-3 py-1.5 text-sm"
+            placeholder="Value e.g. Not Allowed" 
+            className="sm:col-span-2 bg-white border border-zinc-200 rounded-xl px-4 py-2 text-sm focus:ring-2 focus:ring-indigo-500/10 outline-none"
           />
-          <button type="button" onClick={addHouseRule} className="bg-gray-100 px-4 py-1.5 rounded-md text-sm font-medium hover:bg-gray-200">Add</button>
+          <button type="button" onClick={addHouseRule} className="bg-zinc-900 text-white rounded-xl text-xs font-bold uppercase tracking-widest hover:bg-zinc-800 transition-all active:scale-95">Add</button>
         </div>
       </section>
 
-      {/* Photos */}
-      <section className="space-y-4">
-        <h3 className="text-lg font-semibold text-gray-900">Property Photos</h3>
+      {/* Premium Photo Grid */}
+      <section className="space-y-6">
+        <div className="flex items-center justify-between">
+           <h3 className="text-sm font-bold text-zinc-900 uppercase tracking-[0.2em]">Property Gallery</h3>
+           <p className="text-[10px] font-medium text-zinc-400 uppercase tracking-widest">Supports PNG, JPG, WEBP</p>
+        </div>
         
-        <div className="grid grid-cols-2 sm:grid-cols-4 md:grid-cols-5 gap-4">
-          {/* Existing Images */}
+        <div className="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-5 gap-6">
           {existingImages.map((img) => (
-            <div key={img.id} className="relative aspect-square rounded-lg overflow-hidden border border-gray-200">
-              <img src={img.image_url} alt="" className="w-full h-full object-cover" />
+            <div key={img._id || img.url} className="relative aspect-square rounded-2xl overflow-hidden border border-zinc-200 group shadow-sm transition-all hover:ring-4 hover:ring-indigo-500/10">
+              <img src={img.url || img.image_url} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700" />
               <button 
                 type="button" 
-                onClick={() => removeExistingImage(img.id)}
-                className="absolute top-1 right-1 bg-white/80 p-1 rounded-full text-red-500 hover:bg-red-50"
-              ><X size={14}/></button>
+                onClick={() => removeExistingImage(img._id || img.url)}
+                className="absolute top-2 right-2 bg-white/90 backdrop-blur-md p-2 rounded-xl text-red-500 opacity-0 group-hover:opacity-100 transition-opacity shadow-lg hover:bg-red-50"
+              ><X size={16}/></button>
             </div>
           ))}
 
-          {/* New Image Previews */}
           {newImages.map((file, idx) => (
-            <div key={idx} className="relative aspect-square rounded-lg overflow-hidden border border-primary-100 bg-primary-50">
-              <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover" />
+            <div key={idx} className="relative aspect-square rounded-2xl overflow-hidden border-2 border-indigo-200 bg-indigo-50 group shadow-md animate-in fade-in zoom-in">
+              <img src={URL.createObjectURL(file)} alt="" className="w-full h-full object-cover group-hover:scale-110 transition-transform duration-700 font-medium" />
               <button 
                 type="button" 
                 onClick={() => removeNewImage(idx)}
-                className="absolute top-1 right-1 bg-white/80 p-1 rounded-full text-red-500 hover:bg-red-50"
-              ><X size={14}/></button>
-              <div className="absolute bottom-0 left-0 right-0 bg-primary-600 text-white text-[10px] py-0.5 text-center font-bold">NEW</div>
+                className="absolute top-2 right-2 bg-white/90 backdrop-blur-md p-2 rounded-xl text-red-500 shadow-lg"
+              ><X size={16}/></button>
+              <div className="absolute inset-x-2 bottom-2 bg-indigo-600 text-white text-[9px] py-1 rounded-lg text-center font-black uppercase tracking-widest shadow-lg">New Upload</div>
             </div>
           ))}
 
-          {/* Upload Button */}
-          <label className="relative aspect-square rounded-lg border-2 border-dashed border-gray-300 flex flex-col items-center justify-center cursor-pointer hover:bg-gray-50 transition">
-            <UploadCloud size={24} className="text-gray-400" />
-            <span className="text-xs text-gray-500 mt-1">Add Photo</span>
+          <label className="relative aspect-square rounded-2xl border-2 border-dashed border-zinc-200 flex flex-col items-center justify-center cursor-pointer hover:bg-zinc-50 hover:border-indigo-300 transition-all group">
+            <div className="p-3 bg-zinc-50 rounded-2xl group-hover:bg-indigo-50 transition-colors">
+               <UploadCloud size={32} className="text-zinc-400 group-hover:text-indigo-500 transition-colors" />
+            </div>
+            <span className="text-[10px] font-bold text-zinc-400 group-hover:text-indigo-600 mt-3 uppercase tracking-widest">Add Media</span>
             <input type="file" multiple accept="image/*" className="hidden" onChange={handleImageSelect} />
           </label>
         </div>
       </section>
 
-      {/* Action Buttons */}
-      <div className="pt-6 border-t flex flex-col sm:flex-row justify-end gap-3">
+      {/* Premium Action Strip */}
+      <div className="pt-10 border-t border-zinc-100 flex flex-col sm:flex-row justify-end gap-4">
         <button
           type="button"
           onClick={onCancel}
           disabled={mutation.isPending || isUploading}
-          className="px-6 py-2.5 rounded-lg font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-50"
+          className="px-8 py-4 rounded-2xl font-bold text-zinc-400 uppercase tracking-widest hover:text-zinc-900 transition-all disabled:opacity-50"
         >
-          Cancel
+          Discard
         </button>
         <button
           type="submit"
           disabled={mutation.isPending || isUploading}
-          className="flex items-center justify-center gap-2 bg-primary-600 text-white px-8 py-2.5 rounded-lg font-semibold shadow-sm hover:bg-primary-700 transition disabled:opacity-70"
+          className="flex items-center justify-center gap-3 bg-indigo-600 text-white px-10 py-4 rounded-2xl font-black text-sm uppercase tracking-[0.15em] shadow-xl shadow-indigo-500/25 hover:bg-indigo-700 hover:shadow-indigo-500/40 transition-all active:scale-95 disabled:opacity-70"
         >
           {(mutation.isPending || isUploading) ? (
-            <><Loader2 className="animate-spin h-5 w-5" /> {isEdit ? "Updating..." : "Publishing..."}</>
+            <><Loader2 className="animate-spin h-5 w-5" /> Processing...</>
           ) : (
-            isEdit ? "Update Listing" : "Publish Property"
+            isEdit ? "Update Listing" : "Publish Global"
           )}
         </button>
       </div>

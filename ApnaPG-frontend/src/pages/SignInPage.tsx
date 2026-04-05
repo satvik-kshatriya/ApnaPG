@@ -7,7 +7,8 @@ export function SignInPage() {
   
   // While returning users have implicit roles in our DB, defining the redirect ensures 
   // they land gracefully into their expected dashboard.
-  const fallbackRedirectUrl = `/${role}/dashboard`;
+  // Generic /dashboard redirector will handle the final destination based on sync.
+  const fallbackRedirectUrl = "/dashboard";
 
   return (
     <div className="flex h-full w-full items-center justify-center py-16">
@@ -15,7 +16,7 @@ export function SignInPage() {
         routing="path" 
         path="/sign-in" 
         signUpUrl={`/sign-up?role=${role}`}
-        fallbackRedirectUrl={fallbackRedirectUrl}
+        forceRedirectUrl={fallbackRedirectUrl}
       />
     </div>
   );

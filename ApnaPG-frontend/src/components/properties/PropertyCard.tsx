@@ -1,34 +1,16 @@
-import { useState } from "react";
-import { useMutation, useQuery } from "@tanstack/react-query";
+import { useQuery } from "@tanstack/react-query";
 import { ShieldCheck, MapPin, IndianRupee, Users, Loader2 } from "lucide-react";
 import { api } from "../../lib/api";
 import { StarRatingDisplay } from "../reviews/StarRatingDisplay";
+import { useHandshake } from "../../hooks/useHandshake";
 
 type PropertyCardProps = {
   property: any;
+  onSelect?: (property: any) => void;
 };
 
-export function PropertyCard({ property }: PropertyCardProps) {
-  const [hasRequested, setHasRequested] = useState(false);
-  const [errorMsg, setErrorMsg] = useState("");
-
-  const handshakeMutation = useMutation({
-    mutationFn: async (propertyId: string) => {
-      const res = await api.post("/api/connections", { property_id: propertyId });
-      return res.data;
-    },
-    onSuccess: () => {
-      setHasRequested(true);
-      setErrorMsg("");
-    },
-    onError: (err: any) => {
-      const msg = err.response?.data?.detail || "You already have an active request for this property.";
-      setErrorMsg(typeof msg === 'string' ? msg : "Action failed.");
-      if (err.response?.status === 400) {
-        setHasRequested(true); 
-      }
-    }
-  });
+export function PropertyCard({ property, onSelect }: PropertyCardProps) {
+  const handshake = useHandshake(property._id);
 
   // Trust Engine: Fetch Owner Rating actively
   const { data: ownerRatingData } = useQuery({
@@ -40,99 +22,106 @@ export function PropertyCard({ property }: PropertyCardProps) {
     enabled: !!property.owner_id
   });
 
-  const handleConnect = () => {
-    handshakeMutation.mutate(property.id);
+  const handleConnect = (e: React.MouseEvent) => {
+    e.stopPropagation(); // Prevent opening modal
+    handshake.mutate();
   };
 
-  const isVerifiedOwner = property.is_verified_owner ?? true; 
+  const isVerifiedOwner = property.is_verified_owner ?? true;
 
   return (
-    <div className="group flex flex-col bg-white rounded-2xl border border-gray-200 overflow-hidden hover:shadow-lg transition duration-200">
-      
-      {/* Cover Photo */}
-      <div className="relative aspect-[4/3] w-full bg-gray-100 overflow-hidden">
+    <div
+      onClick={() => onSelect?.(property)}
+      className={`group flex flex-col bg-white rounded-2xl border border-slate-200/60 overflow-hidden hover:shadow-2xl hover:-translate-y-1 transition-all duration-500 ring-1 ring-transparent hover:ring-primary-500/10 ${onSelect ? 'cursor-pointer' : ''}`}
+    >
+
+      {/* Cover Photo Area with Premium Zoom */}
+      <div className="relative aspect-[4/3] w-full bg-zinc-100 overflow-hidden">
         {property.images && property.images.length > 0 ? (
-          <img 
-            src={property.images[0].image_url} 
-            alt={property.title} 
-            className="w-full h-full object-cover group-hover:scale-105 transition duration-500 ease-out"
+          <img
+            src={property.images[0].url}
+            alt={property.title}
+            className="w-full h-full object-cover group-hover:scale-105 transition-transform duration-700 ease-out"
           />
         ) : (
-          <div className="w-full h-full flex items-center justify-center text-gray-300">
+          <div className="w-full h-full flex items-center justify-center text-zinc-300">
             No Image
           </div>
         )}
 
-        {/* Badges Overlay */}
-        <div className="absolute top-3 left-3 flex flex-col gap-2">
+        {/* Floating Badges Overlay */}
+        <div className="absolute top-4 left-4 flex flex-col gap-2">
           {isVerifiedOwner && (
-            <div className="bg-white/90 backdrop-blur text-green-700 font-bold text-xs uppercase tracking-wide px-2.5 py-1 rounded-md shadow-sm flex items-center gap-1">
-              <ShieldCheck size={14} /> Broker-Free Verified
+            <div className="bg-white/95 backdrop-blur-sm text-primary-700 font-bold text-[10px] uppercase tracking-wider px-2.5 py-1.5 rounded-lg shadow-sm flex items-center gap-1.5 border border-primary-100/50">
+              <ShieldCheck size={14} className="text-primary-600" /> Broker-Free
             </div>
           )}
         </div>
+
+        {/* Occupancy Indicator Overlay */}
+        <div className="absolute top-4 right-4 bg-slate-900/40 backdrop-blur-md text-white text-[10px] font-bold px-2 py-1 rounded-md border border-white/10 shadow-sm capitalize">
+          {property.occupancy_type}
+        </div>
       </div>
 
-      {/* Content */}
+      {/* Content Area */}
       <div className="p-5 flex flex-col flex-grow">
         <div className="flex justify-between items-start gap-4 mb-2">
-          <h3 className="font-bold text-lg text-gray-900 line-clamp-1 group-hover:text-primary-600 transition">
+          <h3 className="font-bold text-lg text-slate-900 line-clamp-1 group-hover:text-primary-600 transition-colors">
             {property.title}
           </h3>
-          <div className="bg-gray-100 text-gray-600 text-xs font-semibold px-2 py-1 rounded-md flex items-center gap-1 whitespace-nowrap">
-            <Users size={12} /> <span className="capitalize">{property.occupancy_type}</span>
+        </div>
+
+        <div className="flex items-center text-slate-700 text-sm mb-4">
+          <MapPin size={14} className="mr-1.5 flex-shrink-0 opacity-80" />
+          <span className="truncate font-medium">{property.locality}</span>
+        </div>
+
+        {/* Micro-Interaction Bar: Rating & Details */}
+        <div className="flex items-center justify-between py-3 border-y border-slate-100 mb-5">
+          <div className="h-6 flex items-center">
+            {ownerRatingData ? (
+              <StarRatingDisplay
+                rating={ownerRatingData.average_rating}
+                count={ownerRatingData.total_reviews}
+                size={14}
+                showText={true}
+              />
+            ) : <div className="animate-pulse bg-slate-100 h-4 w-24 rounded-full"></div>}
+          </div>
+
+          <div className="flex items-center gap-1 text-xs font-bold text-slate-600 bg-slate-50 px-2.5 py-1 rounded-full border border-slate-100">
+            <Users size={12} /> <span className="uppercase tracking-tighter">{property.occupancy_type}</span>
           </div>
         </div>
-        
-        {/* Trust Rating Injected */}
-        <div className="mb-3 border-b border-gray-100 pb-3 h-[24px]">
-          {ownerRatingData ? (
-             <StarRatingDisplay 
-               rating={ownerRatingData.average_rating} 
-               count={ownerRatingData.total_reviews} 
-               size={14} 
-             />
-          ) : <div className="animate-pulse bg-gray-100 h-4 w-24 rounded"></div>}
-        </div>
 
-        <div className="flex items-center text-gray-500 text-sm mb-4">
-          <MapPin size={14} className="mr-1 flex-shrink-0" />
-          <span className="truncate">{property.locality}</span>
-        </div>
-
-        {errorMsg && (
-          <div className="text-xs text-red-600 mb-3 bg-red-50 p-2 rounded border border-red-100">
-            {errorMsg}
-          </div>
-        )}
-
-        {/* Footer Area */}
-        <div className="mt-auto flex items-center justify-between border-t border-gray-100 pt-4">
+        {/* Footer Area: Pricing & CTA */}
+        <div className="mt-auto flex items-center justify-between pt-2">
           <div className="flex flex-col">
-            <span className="text-xs text-gray-500 font-medium uppercase tracking-wide">Rent</span>
-            <div className="text-xl font-bold flex items-center text-gray-900">
-              <IndianRupee size={18} className="mr-0.5" />
+            <span className="text-[10px] text-slate-600 font-black uppercase tracking-widest pl-0.5">Rent</span>
+            <div className="text-xl font-extrabold flex items-center text-slate-900 leading-none mt-1">
+              <IndianRupee size={20} className="mr-0.5 text-primary-600" />
               {property.monthly_rent?.toLocaleString('en-IN')}
-              <span className="text-sm text-gray-500 font-normal ml-1">/mo</span>
+              <span className="text-sm text-slate-500 font-bold ml-1.5">/mo</span>
             </div>
           </div>
-          
+
           <button
             onClick={handleConnect}
-            disabled={hasRequested || handshakeMutation.isPending}
-            className={`px-5 py-2.5 rounded-lg font-semibold text-sm transition shadow-sm
-              ${hasRequested 
-                ? "bg-gray-100 text-gray-500 border border-gray-200 cursor-not-allowed" 
-                : "bg-gray-900 border border-transparent text-white hover:bg-gray-800 hover:shadow"
+            disabled={handshake.isSuccess || handshake.isPending}
+            className={`px-5 py-3 rounded-xl font-bold text-sm transition-all shadow-md active:scale-95 hover:cursor-pointer
+              ${handshake.isSuccess
+                ? "bg-slate-100 text-slate-400 border border-slate-200 cursor-not-allowed shadow-none"
+                : "bg-primary-600 border border-transparent text-white hover:bg-primary-700 hover:shadow-primary-500/20"
               }
             `}
           >
-            {handshakeMutation.isPending ? (
-              <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> Connecting...</span>
-            ) : hasRequested ? (
-              "Request Sent"
+            {handshake.isPending ? (
+              <span className="flex items-center gap-2"><Loader2 className="w-4 h-4 animate-spin" /> ...</span>
+            ) : handshake.isSuccess ? (
+              "Sent"
             ) : (
-              "Request Connection"
+              "Request"
             )}
           </button>
         </div>

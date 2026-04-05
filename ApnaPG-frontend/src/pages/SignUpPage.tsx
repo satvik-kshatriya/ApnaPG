@@ -6,7 +6,8 @@ export function SignUpPage() {
   const role = searchParams.get("role") || "tenant";
   
   // Predict the destination dashboard based on the selected role
-  const fallbackRedirectUrl = `/${role}/dashboard`;
+  // Predict the destination dashboard based on the selected role
+  const fallbackRedirectUrl = "/dashboard";
 
   return (
     <div className="flex h-full w-full items-center justify-center py-16">
@@ -14,7 +15,7 @@ export function SignUpPage() {
         routing="path" 
         path="/sign-up" 
         signInUrl={`/sign-in?role=${role}`}
-        fallbackRedirectUrl={fallbackRedirectUrl}
+        forceRedirectUrl={fallbackRedirectUrl}
       />
     </div>
   );

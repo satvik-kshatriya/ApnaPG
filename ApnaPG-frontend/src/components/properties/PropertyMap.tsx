@@ -16,18 +16,21 @@ L.Icon.Default.mergeOptions({
   shadowUrl: markerShadow,
 });
 
-// Create a custom modern icon if desired instead of default
+// Create a professional, dynamic price-pin marker
 const createCustomIcon = (price: string) => {
   return L.divIcon({
     className: "custom-map-marker",
     html: `
-      <div class="bg-white border-2 border-primary-600 text-gray-900 font-bold px-2 py-1 rounded-full shadow-lg text-xs whitespace-nowrap flex items-center">
-        ₹${price}
+      <div class="group relative flex flex-col items-center">
+        <div class="bg-slate-900 text-white font-black px-3 py-1.5 rounded-full shadow-2xl text-[13px] whitespace-nowrap flex items-center gap-1 transition-transform group-hover:scale-110 border border-white/20">
+          <span class="text-primary-400">₹</span>${price}
+        </div>
+        <div class="w-2.5 h-2.5 bg-slate-900 rotate-45 -mt-1.5 border-r border-b border-white/10"></div>
       </div>
     `,
-    iconSize: [40, 24],
-    iconAnchor: [20, 24],
-    popupAnchor: [0, -24],
+    iconSize: [60, 36],
+    iconAnchor: [30, 36],
+    popupAnchor: [0, -36],
   });
 };
 
@@ -39,11 +42,8 @@ function MapBoundsUpdater({ properties }: { properties: any[] }) {
 
     const bounds = L.latLngBounds(
       properties.map((p) => [
-        // Using mock coordinates for MVP, assuming locality maps roughly to some bounding box
-        // In a real app we'd fetch lat/lng from backend. 
-        // For MVP mock purposes, we generate deterministic random coords near a center point (Delhi).
-        getMockLat(p.locality, p.id),
-        getMockLng(p.locality, p.id)
+        p.location.coordinates[1], // Latitude
+        p.location.coordinates[0]  // Longitude
       ])
     );
     if (bounds.isValid()) {
@@ -54,11 +54,10 @@ function MapBoundsUpdater({ properties }: { properties: any[] }) {
   return null;
 }
 
-// Deterministic mock coordinate generators based on string hashes
-const getMockLat = (locality: string, id: string) => 28.6139 + (locality.length + id.charCodeAt(0) % 10) * 0.01;
-const getMockLng = (locality: string, id: string) => 77.2090 + ((locality.length * id.charCodeAt(1)) % 10) * 0.01;
+// No longer using mock generators as backend provides real coordinates via GeoJSON Point.
 
-export function PropertyMap({ properties }: { properties: any[] }) {
+
+export function PropertyMap({ properties, onSelect }: { properties: any[]; onSelect?: (property: any) => void }) {
   if (!properties || properties.length === 0) {
     return (
       <div className="w-full h-full bg-gray-100 flex items-center justify-center rounded-xl border border-gray-200">
@@ -75,46 +74,50 @@ export function PropertyMap({ properties }: { properties: any[] }) {
 
   return (
     <div className="w-full h-full rounded-xl overflow-hidden border border-gray-200 shadow-sm relative z-0">
-      <MapContainer 
-        center={center} 
-        zoom={12} 
+      <MapContainer
+        center={center}
+        zoom={12}
         style={{ height: "100%", width: "100%", zIndex: 1 }}
         scrollWheelZoom={true}
+        className="saturate-[0.85] contrast-[1.05]"
       >
         <TileLayer
-          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors'
-          url="https://{s}.basemaps.cartocdn.com/rastertiles/voyager/{z}/{x}/{y}{r}.png"
+          attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
+          url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
         />
-        
+
         {properties.map((prop) => {
-          const lat = getMockLat(prop.locality, prop.id);
-          const lng = getMockLng(prop.locality, prop.id);
+          const lat = prop.location.coordinates[1];
+          const lng = prop.location.coordinates[0];
           const price = (prop.monthly_rent / 1000).toFixed(1) + "k";
 
           return (
-            <Marker 
-              key={prop.id} 
-              position={[lat, lng]} 
+            <Marker
+              key={prop._id}
+              position={[lat, lng]}
               icon={createCustomIcon(price)}
             >
               <Popup className="custom-popup">
-                <div className="w-48 overflow-hidden rounded-md cursor-pointer group">
-                   {prop.images && prop.images[0] ? (
-                     <div className="h-24 w-full overflow-hidden">
-                       <img src={prop.images[0].image_url} alt="" className="object-cover w-full h-full group-hover:scale-105 transition" />
-                     </div>
-                   ) : (
-                     <div className="h-24 w-full bg-gray-200 flex items-center justify-center">
-                       <MapPin className="text-gray-400" />
-                     </div>
-                   )}
-                   <div className="p-2">
-                     <p className="font-bold text-sm text-gray-900 truncate">{prop.title}</p>
-                     <p className="text-xs text-gray-500 truncate">{prop.locality}</p>
-                     <p className="font-semibold text-primary-600 mt-1 flex items-center text-sm">
-                       <IndianRupee size={12} /> {prop.monthly_rent} <span className="font-normal text-xs text-gray-500 ml-1">/mo</span>
-                     </p>
-                   </div>
+                <div
+                  onClick={() => onSelect?.(prop)}
+                  className="w-48 overflow-hidden rounded-md cursor-pointer group"
+                >
+                  {prop.images && prop.images[0] ? (
+                    <div className="h-24 w-full overflow-hidden">
+                      <img src={prop.images[0].url} alt="" className="object-cover w-full h-full group-hover:scale-105 transition" />
+                    </div>
+                  ) : (
+                    <div className="h-24 w-full bg-gray-200 flex items-center justify-center">
+                      <MapPin className="text-gray-400" />
+                    </div>
+                  )}
+                  <div className="p-2">
+                    <p className="font-bold text-sm text-gray-900 truncate">{prop.title}</p>
+                    <p className="text-xs text-gray-500 truncate">{prop.locality}</p>
+                    <p className="font-semibold text-primary-600 mt-1 flex items-center text-sm">
+                      <IndianRupee size={12} /> {prop.monthly_rent} <span className="font-normal text-xs text-gray-500 ml-1">/mo</span>
+                    </p>
+                  </div>
                 </div>
               </Popup>
             </Marker>
