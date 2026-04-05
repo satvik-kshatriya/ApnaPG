@@ -1,1 +1,0 @@
-# CRUD (database interaction logic)
